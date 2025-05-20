@@ -32,10 +32,13 @@ This code was tested with PyTorch 2.3.1, cuda 11.8 and torch_geometrics 2.3.1
     
     ```pip install -e .```
 
+  - To run our dataset download/processing scripts out-of-the-box, `openpyxl` is required for reading `.xlsx` files with `pandas`. Installing with pip:
+
+    ```pip install openpyxl```
 
 ## Dataset Download/Processing
 
-We provide a series of scripts to download/process the pretraining and finetuning datasets. To download/setup the datasets, run the scripts in the data_processing/ folder in order:
+We provide a series of scripts to download/process the pretraining and finetuning datasets. Ensure you have `unzip` installed before running these scripts. To download/setup the datasets, run the scripts in the data_processing/ folder in order:
 
 ```
 bash data_processing/00_download_fp2mol_data.sh
