@@ -8,7 +8,8 @@ wandb_name: 'mass_spec_exp'
 gpus: 1                     # Multi-gpu is not implemented on this branch
 
 decoder: null # path to pretrained decoder
-encoder: null # path to pretrained encoder
+# MIST EMA checkpoints: https://zenodo.org/records/23303289
+encoder: null # path to a coleygroup/MIST EMA checkpoint
 
 resume: null
 test_only: null
