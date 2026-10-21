@@ -23,3 +23,5 @@ spec_folder: '../../../data/canopus/spec_files'
 cache_featurizers: True
 set_pooling: 'cls'
 max_count: null
+
+max_peaks: 10

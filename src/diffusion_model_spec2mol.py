@@ -21,11 +21,14 @@ from metrics.abstract_metrics import SumExceptBatchMetric, SumExceptBatchKL, NLL
 from src.metrics.diffms_metrics import K_ACC_Collection, K_SimilarityCollection, Validity
 from src import utils
 from src.mist.models.spectra_encoder import SpectraEncoderGrowing
+from src.mist.models.checkpoint import load_mist_checkpoint
+from src.mist.models.scaled import ScaledMIST
+from omegaconf import open_dict
 
 
 class Spec2MolDenoisingDiffusion(pl.LightningModule):
     def __init__(self, cfg, dataset_infos, train_metrics, visualization_tools, extra_features,
-                 domain_features):
+                 domain_features, load_pretrained_encoder=True):
         super().__init__()
 
         input_dims = dataset_infos.input_dims
@@ -101,44 +104,51 @@ class Spec2MolDenoisingDiffusion(pl.LightningModule):
         except Exception as e:
             logging.info(f"Could not load decoder: {e}")
 
-        hidden_size = 256
-        try:
-            hidden_size = cfg.model.encoder_hidden_dim
-        except:
-            print("No hidden size specified, using default value of 256")
+        mist_config = getattr(cfg.model, 'mist_model_config', None)
+        self._mist_checkpoint_override = load_pretrained_encoder and cfg.general.encoder is not None
+        if self._mist_checkpoint_override:
+            self.encoder = load_mist_checkpoint(cfg.general.encoder)
+            with open_dict(cfg.model):
+                cfg.model.mist_model_config = self.encoder.model_config
+            # Combined checkpoints carry their own encoder weights and architecture.
+            cfg.general.encoder = None
+        elif mist_config is not None:
+            self.encoder = ScaledMIST(**dict(mist_config))
+        else:
+            hidden_size = 256
+            try:
+                hidden_size = cfg.model.encoder_hidden_dim
+            except:
+                print("No hidden size specified, using default value of 256")
 
-        magma_modulo = 512
-        try:
-            magma_modulo = cfg.model.encoder_magma_modulo
-        except:
-            print("No magma modulo specified, using default value of 512")
+            magma_modulo = 512
+            try:
+                magma_modulo = cfg.model.encoder_magma_modulo
+            except:
+                print("No magma modulo specified, using default value of 512")
         
-        self.encoder = SpectraEncoderGrowing(
-                        inten_transform='float',
-                        inten_prob=0.1,
-                        remove_prob=0.5,
-                        peak_attn_layers=2,
-                        num_heads=8,
-                        pairwise_featurization=True,
-                        embed_instrument=False,
-                        cls_type='ms1',
-                        set_pooling='cls',
-                        spec_features='peakformula',
-                        mol_features='fingerprint',
-                        form_embedder='pos-cos',
-                        output_size=4096,
-                        hidden_size=hidden_size,
-                        spectra_dropout=0.1,
-                        top_layers=1,
-                        refine_layers=4,
-                        magma_modulo=magma_modulo,
-                    )
+            self.encoder = SpectraEncoderGrowing(
+                            inten_transform='float',
+                            inten_prob=0.1,
+                            remove_prob=0.5,
+                            peak_attn_layers=2,
+                            num_heads=8,
+                            pairwise_featurization=True,
+                            embed_instrument=False,
+                            cls_type='ms1',
+                            set_pooling='cls',
+                            spec_features='peakformula',
+                            mol_features='fingerprint',
+                            form_embedder='pos-cos',
+                            output_size=4096,
+                            hidden_size=hidden_size,
+                            spectra_dropout=0.1,
+                            top_layers=1,
+                            refine_layers=4,
+                            magma_modulo=magma_modulo,
+                        )
         
-        try:
-            if cfg.general.encoder is not None:
-                self.encoder.load_state_dict(torch.load(cfg.general.encoder), strict=True)
-        except Exception as e:
-            logging.info(f"Could not load encoder: {e}")
+        hidden_size = getattr(self.encoder, 'hidden_size', getattr(cfg.model, 'encoder_hidden_dim', 256))
 
         self.noise_schedule = PredefinedNoiseScheduleDiscrete(cfg.model.diffusion_noise_schedule, timesteps=cfg.model.diffusion_steps)
         self.denoise_nodes = getattr(cfg.dataset, 'denoise_nodes', False)
@@ -175,13 +185,22 @@ class Spec2MolDenoisingDiffusion(pl.LightningModule):
             self.limit_dist = utils.PlaceHolder(X=x_marginals, E=e_marginals,
                                                 y=torch.ones(self.ydim_output) / self.ydim_output)
 
-        self.save_hyperparameters(ignore=['train_metrics', 'sampling_metrics'])
+        self.save_hyperparameters(ignore=['train_metrics', 'sampling_metrics', 'load_pretrained_encoder'])
         self.start_epoch_time = None
         self.train_iterations = None
         self.val_iterations = None
         self.log_every_steps = cfg.general.log_every_steps
         self.best_val_nll = 1e8
         self.val_counter = 1
+
+    def on_load_checkpoint(self, checkpoint):
+        # An explicitly selected MIST checkpoint takes precedence over a bundled encoder.
+        if self._mist_checkpoint_override:
+            state = checkpoint['state_dict']
+            for name in list(state):
+                if name.startswith('encoder.'):
+                    del state[name]
+            state.update({f'encoder.{name}': value for name, value in self.encoder.state_dict().items()})
 
     def training_step(self, batch, i):
         output, aux = self.encoder(batch)

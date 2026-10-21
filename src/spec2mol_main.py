@@ -20,6 +20,7 @@ from pytorch_lightning.utilities.warnings import PossibleUserWarning
 
 from src import utils
 from src.diffusion_model_spec2mol import Spec2MolDenoisingDiffusion
+from src.mist.models.checkpoint import configure_encoder_finetuning
 from src.diffusion.extra_features import DummyExtraFeatures, ExtraFeatures
 from src.metrics.molecular_metrics_discrete import TrainMolecularMetricsDiscrete
 from src.diffusion.extra_features_molecular import ExtraMolecularFeatures
@@ -39,7 +40,7 @@ def get_resume(cfg, model_kwargs):
     test_samples_to_generate = cfg.general.test_samples_to_generate
     gpus = cfg.general.gpus
 
-    model = Spec2MolDenoisingDiffusion.load_from_checkpoint(resume, **model_kwargs)
+    model = Spec2MolDenoisingDiffusion.load_from_checkpoint(resume, load_pretrained_encoder=False, **model_kwargs)
 
     cfg = model.cfg
     cfg.general.test_only = resume
@@ -47,6 +48,7 @@ def get_resume(cfg, model_kwargs):
     cfg.general.val_samples_to_generate = val_samples_to_generate
     cfg.general.test_samples_to_generate = test_samples_to_generate
     cfg.general.gpus = gpus
+    cfg.general.encoder = saved_cfg.general.encoder
     cfg = utils.update_config_with_new_keys(cfg, saved_cfg)
     return cfg, model
 
@@ -60,12 +62,14 @@ def get_resume_adaptive(cfg, model_kwargs):
 
     resume_path = os.path.join(root_dir, cfg.general.resume)
 
-    model = Spec2MolDenoisingDiffusion.load_from_checkpoint(resume_path, **model_kwargs)
+    model = Spec2MolDenoisingDiffusion.load_from_checkpoint(resume_path, load_pretrained_encoder=False, **model_kwargs)
     
     new_cfg = model.cfg
 
     for category in cfg:
         for arg in cfg[category]:
+            if category == 'model' and arg == 'mist_model_config' and cfg[category][arg] is None:
+                continue
             new_cfg[category][arg] = cfg[category][arg]
 
     new_cfg.general.resume = resume_path
@@ -74,35 +78,11 @@ def get_resume_adaptive(cfg, model_kwargs):
     new_cfg = utils.update_config_with_new_keys(new_cfg, saved_cfg)
     return new_cfg, model
 
-def apply_encoder_finetuning(model, strategy):    
-    if strategy is None:
-        pass
-    elif strategy == 'freeze':
-        for param in model.encoder.parameters():
-            param.requires_grad = False
-    elif strategy == 'ft-unfold':
-        for param in model.encoder.named_parameters():
-            layer = param[0].split('.')[1]
-            if layer != '2':
-                param[1].requires_grad = False
-    elif strategy == 'freeze-unfold':
-        for param in model.encoder.named_parameters():
-            layer = param[0].split('.')[1]
-            if layer == '2':
-                param[1].requires_grad = False
-    elif strategy == 'ft-transformer':
-        for param in model.encoder.named_parameters():
-            layer = param[0].split('.')[1]
-            if layer != '0':
-                param[1].requires_grad = False
-    elif strategy == 'freeze-transformer':
-        for param in model.encoder.named_parameters():
-            layer = param[0].split('.')[1]
-            if layer == '0':
-                param[1].requires_grad = False
-    else:
-        raise NotImplementedError(f'Unknown Finetune Strategy: {strategy}')
-    
+def apply_encoder_finetuning(model, strategy):
+    """Configure the MIST encoder's trainable parameters."""
+    configure_encoder_finetuning(model.encoder, strategy)
+
+
 def apply_decoder_finetuning(model, strategy):
     if strategy is None:
         pass
@@ -152,6 +132,8 @@ def load_weights(model, path):
     # Filter out keys that don't match the model (for partial loading)
     model_state_dict = model.state_dict()
     filtered_state_dict = {k: v for k, v in state_dict.items() if k in model_state_dict}
+    if getattr(model, '_mist_checkpoint_override', False):
+        filtered_state_dict = {k: v for k, v in filtered_state_dict.items() if not k.startswith('encoder.')}
     
     # Load the weights
     missing_keys, unexpected_keys = model.load_state_dict(filtered_state_dict, strict=False)

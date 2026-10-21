@@ -18,3 +18,6 @@ encoder_magma_modulo: 512         # Small Model Default (CANOPUS)
 #encoder_magma_modulo: 2048       # Large Model Default (MSG)
 
 lambda_train: [0, 1, 0]
+
+# Saved automatically when loading a coleygroup/MIST checkpoint.
+mist_model_config: null

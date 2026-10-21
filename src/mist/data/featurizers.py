@@ -732,7 +732,7 @@ class PeakFormula(SpecFeaturizer):
             inten_list = list(out_dict["intens"])
 
             new_order = np.argsort(inten_list)[::-1]
-            cutoff_ind = min(len(inten_list) - 1, self.max_peaks)
+            cutoff_ind = min(len(inten_list), self.max_peaks)
             new_inds = new_order[:cutoff_ind]
 
             # Get new frags, intens, ions and assign to outdict
