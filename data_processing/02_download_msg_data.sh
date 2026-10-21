@@ -2,7 +2,7 @@
 # This script downloads preprocessed data from the MassSpecGym project
 # Original MassSpecGym code/data: https://github.com/pluskal-lab/MassSpecGym
 
-export_link="https://zenodo.org/records/15008938/files/msg_preprocessed.tar.gz"
+export_link="https://zenodo.org/records/23542112/files/msg_preprocessed.tar.gz"
 
 mkdir data/
 cd data/

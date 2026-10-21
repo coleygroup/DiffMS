@@ -54,7 +54,7 @@ To finetune the end-to-end model on spectra-molecule generation, run [spec2mol_m
 
 ## Pretrained Checkpoints
 
-Pretrained DiffMS end-to-end models and decoders are available [here](https://zenodo.org/records/15122968). MIST encoder checkpoints are available [here](https://zenodo.org/records/23303289), with the complete training code in [coleygroup/MIST](https://github.com/coleygroup/MIST). The MIST checkpoints, `mist_{canopus,msg}_{noaug,aug}.ckpt`, cover CANOPUS and MassSpecGym, with (`aug`) or without (`noaug`) synthetic training spectra.
+Pretrained DiffMS end-to-end models and decoders are available [here](https://zenodo.org/records/23542112). MIST encoder checkpoints are available [here](https://zenodo.org/records/23303289), with the complete training code in [coleygroup/MIST](https://github.com/coleygroup/MIST). The MIST checkpoints, `mist_{canopus,msg}_{noaug,aug}.ckpt`, cover CANOPUS and MassSpecGym, with (`aug`) or without (`noaug`) synthetic training spectra.
 
 To use a pretrained end-to-end model, set `general.load_weights` in [general_default.yaml](configs/general/general_default.yaml) to its checkpoint path. To initialize the encoder and decoder separately, set `general.encoder` and `general.decoder` to their respective checkpoint paths.
 
